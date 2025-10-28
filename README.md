@@ -64,38 +64,46 @@ A aplicação estará acessível em `http://127.0.0.1:8000`.
 
 ## Exemplos (curl)
 
+Observação: as rotas `/tasks/*` exigem autenticação. Antes, faça login em `/auth/login` e use o valor de `access_token` abaixo como `<JWT>`.
+
 Criar tarefa:
 ```
 curl -X POST "http://127.0.0.1:8000/tasks/" \
+  -H "Authorization: Bearer <JWT>" \
   -H "Content-Type: application/json" \
   -d '{"title": "Estudar FastAPI", "description": "Ler docs oficiais"}'
 ```
 
 Listar tarefas (10 primeiras):
 ```
-curl "http://127.0.0.1:8000/tasks/?skip=0&limit=10"
+curl "http://127.0.0.1:8000/tasks/?skip=0&limit=10" \
+  -H "Authorization: Bearer <JWT>"
 ```
 
 Filtrar concluídas:
 ```
-curl "http://127.0.0.1:8000/tasks/?completed=true"
+curl "http://127.0.0.1:8000/tasks/?completed=true" \
+  -H "Authorization: Bearer <JWT>"
 ```
 
 Obter por ID:
 ```
-curl "http://127.0.0.1:8000/tasks/1"
+curl "http://127.0.0.1:8000/tasks/1" \
+  -H "Authorization: Bearer <JWT>"
 ```
 
 Atualizar tarefa:
 ```
 curl -X PUT "http://127.0.0.1:8000/tasks/1" \
+  -H "Authorization: Bearer <JWT>" \
   -H "Content-Type: application/json" \
   -d '{"completed": true, "title": "Estudar FastAPI (revisto)"}'
 ```
 
 Remover tarefa:
 ```
-curl -X DELETE "http://127.0.0.1:8000/tasks/1"
+curl -X DELETE "http://127.0.0.1:8000/tasks/1" \
+  -H "Authorization: Bearer <JWT>"
 ```
 
 ## Notas
