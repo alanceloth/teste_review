@@ -2,10 +2,17 @@ from typing import List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from . import models, schemas
-from .auth import create_access_token, get_current_user, hash_password, verify_password
+from .auth import (
+    DUMMY_PASSWORD_HASH,
+    create_access_token,
+    get_current_user,
+    hash_password,
+    verify_password,
+)
 from .database import engine, get_db
 
 
@@ -140,23 +147,19 @@ def delete_task(
 def register(user_in: schemas.UserCreate, db: Session = Depends(get_db)) -> models.User:
     """Registra um novo usuário com senha hash e valida unicidade."""
 
-    exists_username = (
-        db.query(models.User).filter(models.User.username == user_in.username).first()
-    )
-    if exists_username:
-        raise HTTPException(status_code=400, detail="Usuário já existe")
-
-    exists_email = db.query(models.User).filter(models.User.email == user_in.email).first()
-    if exists_email:
-        raise HTTPException(status_code=400, detail="E-mail já cadastrado")
-
     user = models.User(
         username=user_in.username,
         email=user_in.email,
         hashed_password=hash_password(user_in.password),
     )
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409, detail="User with given credentials already exists"
+        )
     db.refresh(user)
     return user
 
@@ -170,8 +173,11 @@ def login(
     user = (
         db.query(models.User).filter(models.User.username == form_data.username).first()
     )
-    if user is None or not verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(status_code=400, detail="Credenciais inválidas")
+    # Caminho de verificação constante para evitar vazamento temporal
+    hashed = user.hashed_password if user else DUMMY_PASSWORD_HASH
+    password_ok = verify_password(form_data.password, hashed)
+    if user is None or not password_ok:
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
     token = create_access_token({"sub": user.username})
     return schemas.Token(access_token=token, token_type="bearer")

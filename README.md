@@ -46,6 +46,10 @@ AGENTS.md
 
 A aplicação estará acessível em `http://127.0.0.1:8000`.
 
+### Variáveis de ambiente
+- `SECRET_KEY` (obrigatória em produção): chave secreta para assinar JWT. Recomendado mínimo de 32 caracteres.
+- `APP_ENV` (opcional): defina como `production` para exigir `SECRET_KEY` no startup. Em desenvolvimento, uma chave temporária é gerada e um aviso é exibido.
+
 ## Testando a API
 - Documentação interativa (Swagger): `http://127.0.0.1:8000/docs`
 - Documentação alternativa (ReDoc): `http://127.0.0.1:8000/redoc`
