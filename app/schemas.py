@@ -1,8 +1,45 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+
+# ==== Users ====
+
+class UserCreate(BaseModel):
+    """Schema para criação de usuário."""
+
+    username: str = Field(..., min_length=3, max_length=50)
+    email: EmailStr
+    password: str = Field(..., min_length=6, max_length=128)
+
+
+class UserLogin(BaseModel):
+    """Schema para login de usuário (JSON)."""
+
+    username: str
+    password: str
+
+
+class UserResponse(BaseModel):
+    """Schema de resposta de usuário (sem senha)."""
+
+    id: int
+    username: str
+    email: EmailStr
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class Token(BaseModel):
+    """Schema de token JWT retornado no login."""
+
+    access_token: str
+    token_type: str
+
+
+# ==== Tasks ====
 
 class TaskCreate(BaseModel):
     """Schema for creating a new task."""
@@ -28,6 +65,4 @@ class TaskResponse(BaseModel):
     completed: bool
     created_at: datetime
 
-    # Pydantic v2: enable ORM mode replacement
     model_config = ConfigDict(from_attributes=True)
-

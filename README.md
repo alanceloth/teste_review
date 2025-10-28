@@ -97,3 +97,42 @@ curl -X DELETE "http://127.0.0.1:8000/tasks/1"
 ## Notas
 - O banco SQLite é criado automaticamente como `tasks.db` na raiz do projeto.
 - Campos de criação e atualização seguem validações do Pydantic v2.
+
+## Autenticação (JWT)
+
+O projeto possui autenticação por JWT (OAuth2 password flow) e proteção das rotas de tarefas por usuário.
+
+### Cadastro
+```
+curl -X POST "http://127.0.0.1:8000/auth/register" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"alice","email":"alice@example.com","password":"secret123"}'
+```
+
+### Login (form-data OAuth2)
+```
+curl -X POST "http://127.0.0.1:8000/auth/login" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "username=alice&password=secret123"
+```
+Resposta:
+```
+{"access_token":"<JWT>","token_type":"bearer"}
+```
+
+### Usuário atual (token Bearer)
+```
+curl "http://127.0.0.1:8000/auth/me" \
+  -H "Authorization: Bearer <JWT>"
+```
+
+### Usando token nas rotas de tarefas
+Inclua o header `Authorization: Bearer <JWT>`:
+```
+curl -X POST "http://127.0.0.1:8000/tasks/" \
+  -H "Authorization: Bearer <JWT>" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Pagar contas","description":"Luz e água"}'
+```
+
+Observação: se já existir um `tasks.db` de versão anterior, exclua-o para recriar as tabelas com usuários e relacionamentos.

@@ -1,9 +1,11 @@
 from typing import List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query, status
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from . import models, schemas
+from .auth import create_access_token, get_current_user, hash_password, verify_password
 from .database import engine, get_db
 
 
@@ -31,10 +33,16 @@ def read_root() -> dict:
     status_code=status.HTTP_201_CREATED,
     tags=["Tasks"],
 )
-def create_task(task_in: schemas.TaskCreate, db: Session = Depends(get_db)) -> models.Task:
-    """Cria uma nova tarefa."""
+def create_task(
+    task_in: schemas.TaskCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+) -> models.Task:
+    """Cria uma nova tarefa do usuário autenticado."""
 
-    task = models.Task(title=task_in.title, description=task_in.description)
+    task = models.Task(
+        title=task_in.title, description=task_in.description, user_id=current_user.id
+    )
     db.add(task)
     db.commit()
     db.refresh(task)
@@ -49,10 +57,11 @@ def list_tasks(
         None, description="Filtrar por status de conclusão (true/false)"
     ),
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ) -> List[models.Task]:
-    """Retorna uma lista paginada de tarefas, com filtro opcional por conclusão."""
+    """Lista tarefas do usuário autenticado, com paginação e filtro de conclusão."""
 
-    query = db.query(models.Task)
+    query = db.query(models.Task).filter(models.Task.user_id == current_user.id)
     if completed is not None:
         query = query.filter(models.Task.completed == completed)
     tasks = query.order_by(models.Task.id).offset(skip).limit(limit).all()
@@ -60,10 +69,18 @@ def list_tasks(
 
 
 @app.get("/tasks/{task_id}", response_model=schemas.TaskResponse, tags=["Tasks"])
-def get_task(task_id: int, db: Session = Depends(get_db)) -> models.Task:
-    """Busca uma tarefa pelo seu ID."""
+def get_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+) -> models.Task:
+    """Busca uma tarefa do usuário autenticado pelo ID."""
 
-    task = db.query(models.Task).filter(models.Task.id == task_id).first()
+    task = (
+        db.query(models.Task)
+        .filter(models.Task.id == task_id, models.Task.user_id == current_user.id)
+        .first()
+    )
     if task is None:
         raise HTTPException(status_code=404, detail="Tarefa não encontrada")
     return task
@@ -71,11 +88,18 @@ def get_task(task_id: int, db: Session = Depends(get_db)) -> models.Task:
 
 @app.put("/tasks/{task_id}", response_model=schemas.TaskResponse, tags=["Tasks"])
 def update_task(
-    task_id: int, task_in: schemas.TaskUpdate, db: Session = Depends(get_db)
+    task_id: int,
+    task_in: schemas.TaskUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ) -> models.Task:
-    """Atualiza campos de uma tarefa existente."""
+    """Atualiza campos de uma tarefa do usuário autenticado."""
 
-    task = db.query(models.Task).filter(models.Task.id == task_id).first()
+    task = (
+        db.query(models.Task)
+        .filter(models.Task.id == task_id, models.Task.user_id == current_user.id)
+        .first()
+    )
     if task is None:
         raise HTTPException(status_code=404, detail="Tarefa não encontrada")
 
@@ -90,10 +114,18 @@ def update_task(
 
 
 @app.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Tasks"])
-def delete_task(task_id: int, db: Session = Depends(get_db)) -> None:
-    """Remove uma tarefa pelo ID."""
+def delete_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+) -> None:
+    """Remove uma tarefa do usuário autenticado pelo ID."""
 
-    task = db.query(models.Task).filter(models.Task.id == task_id).first()
+    task = (
+        db.query(models.Task)
+        .filter(models.Task.id == task_id, models.Task.user_id == current_user.id)
+        .first()
+    )
     if task is None:
         raise HTTPException(status_code=404, detail="Tarefa não encontrada")
 
@@ -101,3 +133,52 @@ def delete_task(task_id: int, db: Session = Depends(get_db)) -> None:
     db.commit()
     return None
 
+
+# ==== Autenticação ====
+
+@app.post("/auth/register", response_model=schemas.UserResponse, tags=["Auth"])
+def register(user_in: schemas.UserCreate, db: Session = Depends(get_db)) -> models.User:
+    """Registra um novo usuário com senha hash e valida unicidade."""
+
+    exists_username = (
+        db.query(models.User).filter(models.User.username == user_in.username).first()
+    )
+    if exists_username:
+        raise HTTPException(status_code=400, detail="Usuário já existe")
+
+    exists_email = db.query(models.User).filter(models.User.email == user_in.email).first()
+    if exists_email:
+        raise HTTPException(status_code=400, detail="E-mail já cadastrado")
+
+    user = models.User(
+        username=user_in.username,
+        email=user_in.email,
+        hashed_password=hash_password(user_in.password),
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@app.post("/auth/login", response_model=schemas.Token, tags=["Auth"])
+def login(
+    form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
+) -> schemas.Token:
+    """Efetua login por formulário OAuth2 e retorna token JWT."""
+
+    user = (
+        db.query(models.User).filter(models.User.username == form_data.username).first()
+    )
+    if user is None or not verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(status_code=400, detail="Credenciais inválidas")
+
+    token = create_access_token({"sub": user.username})
+    return schemas.Token(access_token=token, token_type="bearer")
+
+
+@app.get("/auth/me", response_model=schemas.UserResponse, tags=["Auth"])
+def read_me(current_user: models.User = Depends(get_current_user)) -> models.User:
+    """Retorna o usuário atual para o token fornecido."""
+
+    return current_user
