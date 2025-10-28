@@ -1,0 +1,22 @@
+language: "pt"
+reviews:
+  high_level_summary: true
+path_filters:
+  - "!venv/**"
+  - "!__pycache__/**"
+  - "!*.db"
+path_instructions:
+  - path: "app/models.py"
+    instruction: |
+      Verifique se os modelos seguem PEP 8, usam tipos corretos do SQLAlchemy
+      e possuem índices/constraints adequados. Garanta que nomes de colunas e
+      tipos estejam consistentes com os schemas Pydantic.
+  - path: "app/schemas.py"
+    instruction: |
+      Confirme uso do Pydantic v2 (ConfigDict, Field), validações min/max_length,
+      e consistência entre Request/Response models. Evite campos desnecessários.
+  - path: "app/main.py"
+    instruction: |
+      Verifique tratamento de erros (404), uso de status adequados, dependências
+      de DB com Depends, e response_model para todas as rotas que retornam dados.
+
